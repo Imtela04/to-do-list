@@ -5,13 +5,13 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
 from passlib.context import CryptContext
 from sqlalchemy.orm import Session
-from database import engine, Base, SessionLocal, get_db, init_db, create_user
+from database import engine, Base, SessionLocal, get_db
 from models import User, Todo
 from schemas import UserPublic, Token, UserCreate, TaskCreate, TaskResponse
 from jose import JWTError, jwt
 from datetime import datetime, timedelta,timezone
 from config import SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES
-from auth import hash_password, verify_password, create_access_token, authenticate_user, get_current_user, oauth2_scheme, pwd_context
+from auth import hash_password, verify_password, create_access_token, authenticate_user, get_current_user, oauth2_scheme, pwd_context, create_user
 
 
 #app initialisation
@@ -46,12 +46,16 @@ def read_root(request: Request, db: Session = Depends(get_db)):
 @app.get("/register", response_class=HTMLResponse)
 def register_page(request: Request):
     return templates.TemplateResponse("register.html", {"request": request})
-@app.post("/register", status_code=201, summary="Create a new user")
-def register(body: UserCreate, request: Request):
-    hashed = hash_password(body.password)
-    create_user(body.username, hashed, body.full_name or "")
-    return templates.TemplateResponse("login.html", {"request":request}) #redirects to login page
-    
+@app.post("/register", status_code=201)
+def register(
+    request: Request,
+    username: str = Form(...),
+    password: str = Form(...),
+    db: Session = Depends(get_db)
+):
+    hashed = hash_password(password)
+    create_user(db, username, hashed)
+    return RedirectResponse(url="/login", status_code=303)    
 
 #login routes
 @app.get("/login", response_class=HTMLResponse)
@@ -59,13 +63,12 @@ def login_page(request:Request):
     return templates.TemplateResponse("login.html", {"request":request})
 
 @app.post("/login", response_model=Token)
-async def login(form_data: OAuth2PasswordRequestForm = Depends()):
-    user = authenticate_user(form_data.username, form_data.password)
+async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+    user = authenticate_user(db, form_data.username, form_data.password)  # ✅ pass db
     if not user:
         raise HTTPException(status_code=401, detail="Invalid credentials")
-    access_token = create_access_token({"sub": user["username"]})
+    access_token = create_access_token({"sub": user.username})
     return {"access_token": access_token, "token_type": "bearer"}
-
 
 #current user route
 @app.get("/me", response_model=UserPublic, summary="Get my profile (protected)")

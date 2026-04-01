@@ -1,6 +1,7 @@
 from jose import JWTError, jwt
 from datetime import datetime, timedelta, timezone
-from fastapi import HTTPException, Request, Depends, status, Session
+from fastapi import HTTPException, Request, Depends, status
+from sqlalchemy.orm import Session
 from schemas import UserPublic
 from models import User
 from typing import Optional
@@ -9,6 +10,7 @@ from config import SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES
 from fastapi.security import OAuth2PasswordBearer
 from passlib.context import CryptContext
 from fastapi.security import OAuth2PasswordBearer
+from database import get_db
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
@@ -35,13 +37,18 @@ def create_access_token(data: dict, expires_minutes: int = ACCESS_TOKEN_EXPIRE_M
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
-def authenticate_user(username: str, password: str) -> Optional[dict]:
-    user = get_user(username)
-    if not user or not verify_password(password, user["hashed_password"]):
+def authenticate_user(db: Session, username: str, password: str):
+    user = get_user(db, username)
+    if not user:
+        return None
+    if not verify_password(password, user.hashed_password):
         return None
     return user
 
-async def get_current_user(token: str = Depends(oauth2_scheme)) -> UserPublic:
+async def get_current_user(
+    token: str = Depends(oauth2_scheme),
+    db: Session = Depends(get_db)          # ✅ inject db
+) -> UserPublic:
     cred_exc = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -55,7 +62,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> UserPublic:
     except JWTError:
         raise cred_exc
 
-    user = get_user(username)
+    user = get_user(db, username)          # ✅ pass db
     if not user:
         raise cred_exc
-    return UserPublic(username=user["username"], full_name=user.get("full_name"))
+    return UserPublic(username=user.username, full_name=user.full_name)  # ✅ attribute access
