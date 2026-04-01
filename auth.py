@@ -1,10 +1,10 @@
 from jose import JWTError, jwt
 from datetime import datetime, timedelta, timezone
-from fastapi import HTTPException, Request, Depends, status
+from fastapi import HTTPException, Request, Depends, status, Session
 from schemas import UserPublic
+from models import User
 from typing import Optional
 from config import SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES
-from database import get_user
 # from main import pwd_context,oauth2_scheme
 from fastapi.security import OAuth2PasswordBearer
 from passlib.context import CryptContext
@@ -12,6 +12,16 @@ from fastapi.security import OAuth2PasswordBearer
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
+
+def get_user(db: Session, username: str):
+    return db.query(User).filter(User.username == username).first()
+
+def create_user(db: Session, username: str, hashed_password: str, full_name: str = ""):
+    user = User(username=username, hashed_password=hashed_password, full_name=full_name)
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
 
 def hash_password(password: str) -> str:
     return pwd_context.hash(password)

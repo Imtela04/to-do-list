@@ -21,7 +21,7 @@ from contextlib import asynccontextmanager
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    init_db()
+    Base.metadata.create_all(bind=engine)  # ✅ creates all tables from models
     yield
 
 app = FastAPI(title="FastAPI To-Do App", lifespan=lifespan)  # ✅ one app
