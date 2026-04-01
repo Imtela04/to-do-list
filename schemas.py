@@ -1,5 +1,6 @@
 #pydantic models to validate and serialise data for request and response 
 from pydantic import BaseModel
+from typing import Optional
 
 class UserCreate(BaseModel):
     username: str
@@ -16,3 +17,14 @@ class TaskResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class UserPublic(BaseModel):
+    username: str
+    full_name: Optional[str] = None
+    class Config:
+        from_attributes = True
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str = "bearer"

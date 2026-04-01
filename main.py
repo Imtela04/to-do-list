@@ -1,37 +1,36 @@
-#handles all server side logic, db interactions, user authentication, CRUD operations for tasks, and rendering of HTML templates for the frontend
-
-# -app initialisation -> creates db+tables, ✅
-#                         fastapi+jinja2 templates, ✅
-#                         sets password hashing context ✅
-# -✅registration routes -> GET/register; POST/register
-# -✅login routes -> GET/login, login form; POST/login, verify pass, set cookie
-# -✅logout route -> GET/logout; delete session cookie, redirect to login
-# -✅homepage -> GET/, display tasks, use cookies for logged in users, redirect to login if not logged in
-# -task management routes -> ✅POST/tasks, new task;
-#                          ✅POST/tasks/{task_id}/toggle, mark task as un/completed; 
-#                         ✅POST/tasks/{task_id}/delete, delete task, 
-#                         ✅POST/tasks/{task_id}/update, update task title
-#✅ -add task (template)-> GET/add, show form
-
-from fastapi import FastAPI, Depends, HTTPException, Request, Form
+from fastapi import FastAPI, Depends, HTTPException, Request, Form,status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
+from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
 from passlib.context import CryptContext
 from sqlalchemy.orm import Session
-from database import engine, Base, SessionLocal, get_db
+from database import engine, Base, SessionLocal, get_db, init_db, create_user
 from models import User, Todo
+from schemas import UserPublic, Token, UserCreate, TaskCreate, TaskResponse
+from jose import JWTError, jwt
+from datetime import datetime, timedelta,timezone
+from config import SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES
+from auth import hash_password, verify_password, create_access_token, authenticate_user, get_current_user, oauth2_scheme, pwd_context
+
 
 #app initialisation
 #create db tables
 Base.metadata.create_all(bind=engine)
+from contextlib import asynccontextmanager
 
-app = FastAPI()
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    init_db()
+    yield
+
+app = FastAPI(title="FastAPI To-Do App", lifespan=lifespan)  # ✅ one app
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
-
+    
 #homepage route
 @app.get("/", response_class=HTMLResponse)
 def read_root(request: Request, db: Session = Depends(get_db)):
@@ -47,19 +46,10 @@ def read_root(request: Request, db: Session = Depends(get_db)):
 @app.get("/register", response_class=HTMLResponse)
 def register_page(request: Request):
     return templates.TemplateResponse("register.html", {"request": request})
-@app.post("/register")
-def register(
-    request:Request, 
-    username: str = Form(...),
-    password: str = Form(...),
-    db: Session = Depends(get_db)
-):
-    if db.query(User).filter(User.name==username).first(): #matching the first instance of the given username from the db table User, true: returns error (username alr exists)
-        return templates.TemplateResponse("register.html", {"request":request, "error":"Username already exists"})
-    hashed_password = pwd_context.hash(password) #encrypting password
-    user = User(name=username, hashed_password=hashed_password) #creates user instance in the Users table with the given username and hashed password
-    db.add(user) #adds instnce to db
-    db.commit() #permanently saves instance
+@app.post("/register", status_code=201, summary="Create a new user")
+def register(body: UserCreate, request: Request):
+    hashed = hash_password(body.password)
+    create_user(body.username, hashed, body.full_name or "")
     return templates.TemplateResponse("login.html", {"request":request}) #redirects to login page
     
 
@@ -68,28 +58,19 @@ def register(
 def login_page(request:Request):
     return templates.TemplateResponse("login.html", {"request":request})
 
-@app.post("/login")
-def login(
-    request: Request,
-    username: str = Form(...),
-    password: str = Form(...),
-    db: Session = Depends(get_db),
-):
-    user = db.query(User).filter(User.name == username).first()
+@app.post("/login", response_model=Token)
+async def login(form_data: OAuth2PasswordRequestForm = Depends()):
+    user = authenticate_user(form_data.username, form_data.password)
     if not user:
-        return templates.TemplateResponse("login.html", {"request": request, "error": "User not found"})
-    if not pwd_context.verify(password, user.hashed_password):
-        return templates.TemplateResponse("login.html", {"request": request, "error": "Incorrect password"})
-    response = RedirectResponse(url="/", status_code=303)
-    response.set_cookie(key="user_id", value=str(user.id), httponly=True)
-    return response
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    access_token = create_access_token({"sub": user["username"]})
+    return {"access_token": access_token, "token_type": "bearer"}
 
-@app.get("/logout")
-def logout():
-    response = RedirectResponse(url="/login", status_code=303)
-    response.delete_cookie("user_id")
-    return response
 
+#current user route
+@app.get("/me", response_model=UserPublic, summary="Get my profile (protected)")
+def read_me(current_user: UserPublic = Depends(get_current_user)):
+    return current_user
 
 #logout route
 @app.get("/logout")
@@ -154,3 +135,18 @@ def add_task_page(request:Request, db:Session=Depends(get_db)):
     if not user:
         return  RedirectResponse(url="/login",status_code=303)
     return templates.TemplateResponse("add_task_page.html",{"request":request, "user":user})
+
+#handles all server side logic, db interactions, user authentication, CRUD operations for tasks, and rendering of HTML templates for the frontend
+
+# -app initialisation -> creates db+tables, ✅
+#                         fastapi+jinja2 templates, ✅
+#                         sets password hashing context ✅
+# -✅registration routes -> GET/register; POST/register
+# -✅login routes -> GET/login, login form; POST/login, verify pass, set cookie
+# -✅logout route -> GET/logout; delete session cookie, redirect to login
+# -✅homepage -> GET/, display tasks, use cookies for logged in users, redirect to login if not logged in
+# -task management routes -> ✅POST/tasks, new task;
+#                          ✅POST/tasks/{task_id}/toggle, mark task as un/completed; 
+#                         ✅POST/tasks/{task_id}/delete, delete task, 
+#                         ✅POST/tasks/{task_id}/update, update task title
+#✅ -add task (template)-> GET/add, show form
