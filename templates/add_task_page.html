@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>To-Do</title>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <form class="add-task-form" method="post" action="/tasks">
+        <h2>Add New Task</h2>
+        <input type="text" name="title" placeholder="Task Name *" required>
+        <textarea name="description" placeholder="Task Description (optional)" rows="4"></textarea>
+        <input type="datetime-local" name="deadline" placeholder="Task Deadline (optional)">
+        <select name="category">
+            <option value="">Select Category</option>
+            <option value="work">Work</option>
+            <option value="personal">Personal</option>
+        </select>
+        <button type="submit">Create Task</button>
+    </form>
+
+</body>
+</html>
