@@ -1,17 +1,12 @@
-from fastapi import FastAPI, Depends, HTTPException, Request, Form,status
+from fastapi import FastAPI, Depends, HTTPException, Request, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
-from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
-from passlib.context import CryptContext
 from sqlalchemy.orm import Session
-from database import engine, Base, SessionLocal, get_db
+from database import engine, Base, get_db
 from models import User, Todo
-from schemas import UserPublic, Token, UserCreate, TaskCreate, TaskResponse
-from jose import JWTError, jwt
-from datetime import datetime, timedelta,timezone
-from config import SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES
-from auth import hash_password, verify_password, create_access_token, authenticate_user, get_current_user, oauth2_scheme, pwd_context, create_user, get_username_from_cookie
+from schemas import UserPublic, Token
+from auth import hash_password, create_access_token, authenticate_user, get_current_user, create_user, get_username_from_cookie
 
 
 #app initialisation

@@ -1,6 +1,5 @@
 #pydantic models to validate and serialise data for request and response 
 from pydantic import BaseModel
-from typing import Optional
 
 class UserCreate(BaseModel):
     username: str
