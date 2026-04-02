@@ -1,6 +1,6 @@
 from fastapi import FastAPI, Depends, HTTPException, Request, Form
-from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse,FileResponse
+# from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 from backend.database import engine, Base, get_db
@@ -20,37 +20,18 @@ async def lifespan(app: FastAPI):
     yield
 
 app = FastAPI(title="FastAPI To-Do App", lifespan=lifespan)  # ✅ one app
-app.mount("/frontend/static", StaticFiles(directory="frontend/static"), name="static")
-templates = Jinja2Templates(directory="templates")
 
-#shifted to auth.py to avoid circular imports
-# pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-# oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
-
-
-    
 #homepage route
-# @app.get("/", response_class=HTMLResponse)
-# def read_root(request: Request, db: Session = Depends(get_db)):
-#     # print('request', request)
-#     username = get_username_from_header(request)
-#     # print('root',username) #?none
-#     if not username:
-#         username = get_username_from_cookie(request)
-#         # print('not username',username)
-#     user = db.query(User).filter(User.username==username).first()
-#     if not user:
-#         return RedirectResponse(url="/login",status_code=303)  #if not logged in, redirect to login page
-#     task = db.query(Todo).filter(Todo.owner_id==user.id).all()
-#     return templates.TemplateResponse("index.html",{"request":request,"todos":task,"user":user})
+#current user route
+@app.get("/api/me", response_model=UserPublic)
+def read_me(current_user: UserPublic = Depends(get_current_user)):
+    return current_user
 
 #registration routes
-@app.get("/register", response_class=HTMLResponse)
-def register_page(request: Request):
-    return templates.TemplateResponse("register.html", {"request": request})
-@app.post("/register", status_code=201)
+logged_in = ''
+@app.post("/api/register", status_code=201)
 def register(
-    request: Request,
+    # request: Request,
     username: str = Form(...),
     password: str = Form(...),
     db: Session = Depends(get_db)
@@ -59,31 +40,25 @@ def register(
     try:
         create_user(db, username, hashed)
     except HTTPException as e:
-        return templates.TemplateResponse("register.html",{"request":request,"error":e.detail})
-    return RedirectResponse(url="/login", status_code=303)    
+        raise HTTPException(status_code=400, detail="Username already taken") 
+    user = authenticate_user(db, username, password)
+    access_token = create_access_token({"sub": user.username})
+    return {"access_token": access_token, "token_type": "Bearer"}
 
 #login routes
-@app.get("/login", response_class=HTMLResponse)
-def login_page(request:Request):
-    return templates.TemplateResponse("login.html", {"request":request})
-
-@app.post("/login", response_model=Token)
-def login(request:Request, username: str = Form(...), password:str = Form(...),db: Session=Depends(get_db)):
+@app.post("/api/login", response_model=Token)
+def login(username: str = Form(...), password:str = Form(...),db: Session=Depends(get_db)):
     #print(request,username,password)
     user = authenticate_user(db, username, password)  # ✅ pass db
     #print(user)
     if not user:
-        return templates.TemplateResponse("login.html",{"request":request, "error":"Invalid credentials"})
+        raise HTTPException(status_code=400, detail="Invalid credentials")
     access_token = create_access_token({"sub": user.username})
     return {
         "access_token": access_token,
-        "token_type": "bearer"
+        "token_type": "Bearer"
     }
 
-#current user route
-@app.get("/", response_model=UserPublic, summary="Get my profile (protected)")
-def read_me(current_user: UserPublic = Depends(get_current_user)):
-    return current_user
 
 #logout route
 @app.get("/logout")
@@ -94,76 +69,75 @@ def logout():
 
 
 #task management routes
-@app.post("/tasks")
-def add_task(request:Request, title:str=Form(...), db:Session=Depends(get_db)):
-    username = get_username_from_header(request)
-    user = db.query(User).filter(User.username==username).first()
-    if not username or not user:
-        return RedirectResponse(url="/login",status_code=303)
+@app.get("/api/tasks")
+def get_tasks(current_user: UserPublic = Depends(get_current_user), db:Session=Depends(get_db)):
+    user = db.query(User).filter(User.username==current_user.username).first()
+    return user.todos
+@app.post("/api/tasks")
+def add_task(current_user:UserPublic=Depends(get_current_user), title:str=Form(...), db:Session=Depends(get_db)):
+    user = db.query(User).filter(User.username==current_user.username).first()
     task = Todo(title=title,owner_id=user.id)
     db.add(task)
     db.commit()
-    return RedirectResponse(url="/",status_code=303)
-@app.post("/tasks/{task_id}/toggle")    
-def toggle(task_id:int, request:Request,db:Session=Depends(get_db)):
-    username = get_username_from_header(request)
-    user = db.query(User).filter(User.username==username).first()
-    if not username or not user:
-        return RedirectResponse(url="/login",status_code=303)
-    task = db.query(Todo).filter(Todo.id==task_id, Todo.owner_id==int(user.id)).first()
-    if not task:
-        raise HTTPException(status_code=404,detail="Task not found")
-    task.completed = not task.completed
-    db.commit()
-    return RedirectResponse(url="/",status_code=303)
+    db.refresh(task)
+    return task
 
-@app.post("/tasks/{task_id}/delete")
-def delete(task_id:int, request:Request,db:Session=Depends(get_db)):
-    # #print(request.cookies)
-    username = get_username_from_header(request)
-    # #print("Username from cookie:", username)
-    user = db.query(User).filter(User.username==username).first()
-    if not username or not user:
-        return RedirectResponse(url="/login",status_code=303)
+@app.delete("/api/tasks/{task_id}")
+def delete(task_id:int, current_user:UserPublic=Depends(get_current_user), db:Session=Depends(get_db)):
+    
+    user = db.query(User).filter(User.username==current_user.username).first()
     task = db.query(Todo).filter(Todo.id==task_id,Todo.owner_id==user.id).first()
     if not task:
         raise HTTPException(status_code=404,detail="Task not found")
     db.delete(task)
     db.commit()
-    return RedirectResponse(url="/",status_code=303)
+    return {"ok":True}
 
-@app.post("/tasks/{task_id}/update")
-def update(task_id:int, request:Request, title:str=Form(...), db:Session=Depends(get_db)):
-    username = get_username_from_header(request)
-    user = db.query(User).filter(User.username==username).first()
-    if not username or not user:
-        return RedirectResponse(url="/login",status_code=303)
-    task = db.query(Todo).filter(Todo.id==task_id,Todo.owner_id==user.id).first()
+# main.py
+
+@app.patch("/api/tasks/{task_id}/title")
+def update_task_title(
+    task_id: int,
+    title: str = Form(...),
+    current_user: UserPublic = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    user = db.query(User).filter(User.username == current_user.username).first()
+    task = db.query(Todo).filter(Todo.id == task_id, Todo.owner_id == user.id).first()
     if not task:
-        raise HTTPException(status_code=404,detail="Task not found")
+        raise HTTPException(status_code=404, detail="Task not found")
     task.title = title
     db.commit()
-    return RedirectResponse(url="/",status_code=303)
+    db.refresh(task)
+    return task
 
-@app.get("/add", response_class=HTMLResponse)
-def add_task_page(request:Request, db:Session=Depends(get_db)):
-    username = get_username_from_header(request)
-    user = db.query(User).filter(User.username==username).first()
-    if not username or not user:
-        return RedirectResponse(url="/login",status_code=303)
-    return templates.TemplateResponse("add_task_page.html",{"request":request, "user":user})
+@app.patch("/api/tasks/{task_id}/toggle")
+def toggle_task(
+    task_id: int,
+    current_user: UserPublic = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    user = db.query(User).filter(User.username == current_user.username).first()
+    task = db.query(Todo).filter(Todo.id == task_id, Todo.owner_id == user.id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    task.completed = not task.completed   # backend handles the flip, no bool parsing needed
+    db.commit()
+    db.refresh(task)
+    return task
 
-#handles all server side logic, db interactions, user authentication, CRUD operations for tasks, and rendering of HTML templates for the frontend
+app.mount("/static", StaticFiles(directory="frontend/static"), name="static")
+# Explicit routes for HTML pages — BEFORE the static catch-all
+@app.get("/")
+def serve_index():
+    return FileResponse("frontend/index.html")
 
-# -app initialisation -> creates db+tables, ✅
-#                         fastapi+jinja2 templates, ✅
-#                         sets password hashing context ✅
-# -✅registration routes -> GET/register; POST/register
-# -✅login routes -> GET/login, login form; POST/login, verify pass, set cookie
-# -✅logout route -> GET/logout; delete session cookie, redirect to login
-# -✅homepage -> GET/, display tasks, use cookies for logged in users, redirect to login if not logged in
-# -task management routes -> ✅POST/tasks, new task;
-#                          ✅POST/tasks/{task_id}/toggle, mark task as un/completed; 
-#                         ✅POST/tasks/{task_id}/delete, delete task, 
-#                         ✅POST/tasks/{task_id}/update, update task title
-#✅ -add task (template)-> GET/add, show form
+@app.get("/login.html")
+def serve_login():
+    return FileResponse("frontend/login.html")
+
+@app.get("/register.html")
+def serve_register():
+    return FileResponse("frontend/register.html")
+# templates = Jinja2Templates(directory="frontend/templates")
+app.mount("/", StaticFiles(directory="frontend", html=True), name="frontend")  # ✅ serve frontend from root

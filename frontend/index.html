@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>To-Do</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <header class="hero">
+    <h1 id="greeting">👋 Hello</h1>
+    <p id="subtext">Make today count!</p>
+  </header>
+
+  <div class="user-info">
+    <span id="username-display"></span>
+    <button onclick="logout()">Logout</button>
+  </div>
+
+  <div class="tasks-container" id="tasks-container"></div>
+
+  <button onclick="showAddForm()">+ Add New Task</button>
+  <div id="add-form" style="display:none;">
+    <input type="text" id="new-task-title" placeholder="Task title">
+    <button onclick="handleAdd()">Save</button>
+    <button onclick="hideAddForm()">Cancel</button>
+  </div>
+
+  <script type="module">
+    import { logout, getTasks, addTask, updateTaskTitle, toggleTask, deleteTask } from "/static/api.js";
+
+    // Guard
+    if (!localStorage.getItem("access_token")) {
+      window.location.href = "/login.html";
+    }
+
+    // Greeting
+    function updateGreeting() {
+      const h = new Date().getHours();
+      const parts =
+        h >= 5  && h < 12 ? { emoji: "🌅", text: "Good Morning",   sub: "Fresh start. Let's get it!" } :
+        h >= 12 && h < 16 ? { emoji: "🌤️", text: "Good Afternoon", sub: "Keep up the momentum!" } :
+        h >= 16 && h < 20 ? { emoji: "🌇", text: "Good Evening",   sub: "You're almost there!" } :
+                            { emoji: "🌙", text: "Good Night",     sub: "Recharge for tomorrow." };
+      document.getElementById("greeting").innerHTML = `${parts.emoji} ${parts.text}`;
+      document.getElementById("subtext").innerText = parts.sub;
+    }
+
+    // Render
+    function renderTasks(tasks) {
+        const container = document.getElementById("tasks-container");
+        container.innerHTML = tasks.map((task, i) => `
+            <div class="task-card ${i % 2 === 0 ? 'yellow' : 'purple'}">
+                <div class="task-title ${task.completed ? 'done' : ''}">${task.title}</div>
+                <div class="task-actions">
+                    <button onclick="handleToggle(${task.id})">
+                        ${task.completed ? '↩️' : '✅'}
+                    </button>
+                    <button onclick="handleEdit(${task.id}, '${task.title.replace(/'/g, "\\'")}')">✏️</button>
+                    <button onclick="handleDelete(${task.id})">🗑️</button>
+                </div>
+            </div>
+        `).join("");
+    }
+
+    async function refresh() {
+      const tasks = await getTasks();
+      if (tasks) renderTasks(tasks);
+    }
+
+    // Handlers — exposed to window for inline onclick
+    window.logout = logout;
+
+    window.handleAdd = async () => {
+      const title = document.getElementById("new-task-title").value.trim();
+      if (!title) return;
+      await addTask(title);
+      document.getElementById("new-task-title").value = "";
+      hideAddForm();
+      refresh();
+    };
+
+    window.handleToggle = async (id) => {
+        await toggleTask(id);       // no need to pass completed — backend flips it
+        refresh();
+    };
+
+    window.handleEdit = async (id, currentTitle) => {
+        const newTitle = prompt("Edit task:", currentTitle);
+        if (!newTitle || newTitle === currentTitle) return;
+        await updateTaskTitle(id, newTitle);
+        refresh();
+    };
+
+    window.handleDelete = async (id) => {
+      await deleteTask(id);
+      refresh();
+    };
+
+    window.showAddForm  = () => document.getElementById("add-form").style.display = "block";
+    window.hideAddForm  = () => document.getElementById("add-form").style.display = "none";
+
+    // Init
+    updateGreeting();
+    setInterval(updateGreeting, 60_000);
+    refresh();
+  </script>
+</body>
+</html>

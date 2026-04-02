@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>To-Do | Login</title>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <div class="auth-card">
+        <h1>Login</h1>
+        <div class="error" id="error-msg" style="display:none;"></div>
+        <input type="text" id="username" placeholder="Username" required>
+        <input type="password" id="password" placeholder="Password" required>
+        <button id="login-btn">Login</button>
+        <p>Don't have an account? <a href="/register.html">Register here</a></p>
+    </div>
+
+    <script type="module">
+        import { login } from "/static/api.js";
+
+        // Redirect if already logged in
+        if (localStorage.getItem("access_token")) {
+            window.location.href = "/index.html";
+        }
+
+        document.getElementById("login-btn").addEventListener("click", async () => {
+            const username = document.getElementById("username").value.trim();
+            const password = document.getElementById("password").value.trim();
+            const errorEl = document.getElementById("error-msg");
+
+            if (!username || !password) {
+                errorEl.textContent = "Please fill in both fields.";
+                errorEl.style.display = "block";
+                return;
+            }
+
+            try {
+                await login(username, password);
+                window.location.href = "/index.html";
+            } catch (e) {
+                errorEl.textContent = "Invalid username or password.";
+                errorEl.style.display = "block";
+            }
+        });
+    </script>
+</body>
+</html>

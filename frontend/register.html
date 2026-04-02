@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>To-Do | Register</title>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <div class="auth-card">
+        <h1>Register</h1>
+        <div class="error" id="error-msg" style="display:none;"></div>
+        <input type="text" id="username" placeholder="Username" required>
+        <input type="password" id="password" placeholder="Password" required>
+        <input type="password" id="confirm-password" placeholder="Confirm Password" required>
+        <button id="register-btn">Register</button>
+        <p>Already have an account? <a href="/login.html">Login here</a></p>
+    </div>
+
+    <script type="module">
+        import { register } from "/static/api.js";
+
+        // Redirect if already logged in
+        if (localStorage.getItem("access_token")) {
+            window.location.href = "/index.html";
+        }
+
+        document.getElementById("register-btn").addEventListener("click", async () => {
+            const username = document.getElementById("username").value.trim();
+            const password = document.getElementById("password").value.trim();
+            const confirm  = document.getElementById("confirm-password").value.trim();
+            const errorEl  = document.getElementById("error-msg");
+
+            // Client-side validation
+            if (!username || !password || !confirm) {
+                errorEl.textContent = "Please fill in all fields.";
+                errorEl.style.display = "block";
+                return;
+            }
+            if (password !== confirm) {
+                errorEl.textContent = "Passwords do not match.";
+                errorEl.style.display = "block";
+                return;
+            }
+            if (password.length < 6) {
+                errorEl.textContent = "Password must be at least 6 characters.";
+                errorEl.style.display = "block";
+                return;
+            }
+
+            try {
+                await register(username, password);
+                window.location.href = "/index.html";
+            } catch (e) {
+                errorEl.textContent = e.message || "Registration failed. Username may already be taken.";
+                errorEl.style.display = "block";
+            }
+        });
+    </script>
+</body>
+</html>
