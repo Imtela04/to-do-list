@@ -78,27 +78,41 @@ function updateGreeting() {
         form.submit();
     }
   }
-  function getCookie(name){
-    return document.cookie.split("; ").find(row=>startsWith(name+"="))?.split("=")[1];
-  }
-  document.addEventListener("DOMContentLoaded",()=>{
-    const token = getCookie("access_token");
-    document.querySelectorAll("form").forEach(form=>{
-        from.addEventListener("submit", async(e)=>{
-            e.preventDefault();
-            const formData = new FormData(form);
-            const response = await fetch(from.action,{
-                method:form.method,
-                headers:{
-                    "Authorisation":`Bearer $ {token}`   //jwt sent in header
-                }, body: new URLSearchParams(formData)
+#   document.addEventListener("DOMContentLoaded",()=>{
+#     const token = localStorage.getItem("access_token");
+#     document.querySelectorAll("form").forEach(form=>{
+#         form.addEventListener("submit", async(e)=>{
+#             e.preventDefault();
+#             const formData = new FormData(form);
+#             console.log('form action',form.action);
+#             const response = await fetch(form.action,{
+#                 method:form.method,
+#                 headers:{
+#                     "Authorization":`Bearer ${token}`   //jwt sent in header
+#                 }, body: new URLSearchParams(formData)
+#             });
+#         });
+#     });
+#   });
+    const getProfile = async () => {
+        const token = localStorage.getItem("access_token");
+        if (!token) return;
+        try {
+            const response = await fetch("/", {
+                headers: {
+                    "Authorization": `Bearer ${token}`
+                }
             });
-            if(response.redirected){
-                window.location.href = response.url;
+            if (response.ok) {
+                const data = await response.json();
+                console.log("Profile data:", data);
+            } else {
+                console.error("Failed to fetch profile");
             }
-        });
-    });
-  });
+        } catch (error) {
+            console.error("Error fetching profile:", error);
+        }
+    };
 </script>
  
 </body>

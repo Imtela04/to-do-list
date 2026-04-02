@@ -2,14 +2,14 @@ from jose import JWTError, jwt
 from datetime import datetime, timedelta, timezone
 from fastapi import HTTPException, Request, Depends, status
 from sqlalchemy.orm import Session
-from schemas import UserPublic
-from models import User
+from backend.schemas import UserPublic
+from backend.models import User
 from typing import Optional
-from config import SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES
+from backend.config import SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES
 from fastapi.security import OAuth2PasswordBearer
 from passlib.context import CryptContext
 from fastapi.security import OAuth2PasswordBearer
-from database import get_db
+from backend.database import get_db
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
@@ -38,9 +38,11 @@ def verify_password(plain: str, hashed: str) -> bool:
     return pwd_context.verify(plain, hashed)
 
 def create_access_token(data: dict, expires_minutes: int = ACCESS_TOKEN_EXPIRE_MINUTES) -> str:
+    print(data)
     to_encode = data.copy()
     expire = datetime.now(timezone.utc) + timedelta(minutes=expires_minutes)
     to_encode.update({"exp": expire})
+    print(to_encode, jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM))
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 dummy=hash_password('dummypassword')
@@ -76,22 +78,30 @@ async def get_current_user(
     return UserPublic(username=user.username)  # ✅ attribute access
 
 
-# def get_username_from_cookie(request: Request) -> Optional[str]:
-#     token = request.cookies.get("access_token")
-#     if not token:
-#         return None
-#     try:
-#         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-#         return payload.get("sub")
-#     except JWTError:
-#         return None
+def get_username_from_cookie(request: Request) -> Optional[str]:
+    token = request.cookies.get("access_token")
+    print(token)
+    if not token:
+        return None
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        return payload.get("sub")
+    except JWTError:
+        return None
 
 def get_username_from_header(request:Request)->Optional[str]:
-    auth_header = request.headers.get("Authorisation")
+    auth_header = request.headers.get("Authorization")
+    for i in request.headers:
+        print(i)
+    # print('request',request)
+    print('auth header',auth_header)
     if not auth_header or not auth_header.startswith("Bearer"):
         return None
     token = auth_header.split(" ")[1]
+    # print('token from header',token)
     try:
         payload = jwt.decode(token,SECRET_KEY,  algorithms=[ALGORITHM])
+        return payload.get("sub")
+        # print('payload',payload)
     except JWTError:
         return None

@@ -1,7 +1,7 @@
 #defines structures of the database tables using SQLAlchemy ORM
 from sqlalchemy import Column, ForeignKey, Integer, String
 from sqlalchemy.orm import relationship
-from database import Base
+from backend.database import Base
 
 class User(Base):
     __tablename__ = "users"

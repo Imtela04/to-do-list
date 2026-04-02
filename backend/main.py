@@ -3,10 +3,10 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
-from database import engine, Base, get_db
-from models import User, Todo
-from schemas import UserPublic, Token
-from auth import hash_password, create_access_token, authenticate_user, get_current_user, create_user, get_username_from_cookie
+from backend.database import engine, Base, get_db
+from backend.models import User, Todo
+from backend.schemas import UserPublic, Token
+from backend.auth import hash_password, create_access_token, authenticate_user, get_current_user, create_user, get_username_from_header, get_username_from_cookie
  
 
 #app initialisation
@@ -30,14 +30,19 @@ templates = Jinja2Templates(directory="templates")
 
     
 #homepage route
-@app.get("/", response_class=HTMLResponse)
-def read_root(request: Request, db: Session = Depends(get_db)):
-    username = get_username_from_cookie(request)
-    user = db.query(User).filter(User.username==username).first()
-    if not username or not user:
-        return RedirectResponse(url="/login",status_code=303)  #if not logged in, redirect to login page
-    task = db.query(Todo).filter(Todo.owner_id==user.id).all()
-    return templates.TemplateResponse("index.html",{"request":request,"todos":task,"user":user})
+# @app.get("/", response_class=HTMLResponse)
+# def read_root(request: Request, db: Session = Depends(get_db)):
+#     # print('request', request)
+#     username = get_username_from_header(request)
+#     # print('root',username) #?none
+#     if not username:
+#         username = get_username_from_cookie(request)
+#         # print('not username',username)
+#     user = db.query(User).filter(User.username==username).first()
+#     if not user:
+#         return RedirectResponse(url="/login",status_code=303)  #if not logged in, redirect to login page
+#     task = db.query(Todo).filter(Todo.owner_id==user.id).all()
+#     return templates.TemplateResponse("index.html",{"request":request,"todos":task,"user":user})
 
 #registration routes
 @app.get("/register", response_class=HTMLResponse)
@@ -64,16 +69,19 @@ def login_page(request:Request):
 
 @app.post("/login", response_model=Token)
 def login(request:Request, username: str = Form(...), password:str = Form(...),db: Session=Depends(get_db)):
+    #print(request,username,password)
     user = authenticate_user(db, username, password)  # ✅ pass db
+    #print(user)
     if not user:
         return templates.TemplateResponse("login.html",{"request":request, "error":"Invalid credentials"})
     access_token = create_access_token({"sub": user.username})
-    response = RedirectResponse(url="/", status_code=303)
-    response.set_cookie(key="access_token",value=access_token, httponly=False)
-    return response
+    return {
+        "access_token": access_token,
+        "token_type": "bearer"
+    }
 
 #current user route
-@app.get("/me", response_model=UserPublic, summary="Get my profile (protected)")
+@app.get("/", response_model=UserPublic, summary="Get my profile (protected)")
 def read_me(current_user: UserPublic = Depends(get_current_user)):
     return current_user
 
@@ -88,7 +96,7 @@ def logout():
 #task management routes
 @app.post("/tasks")
 def add_task(request:Request, title:str=Form(...), db:Session=Depends(get_db)):
-    username = get_username_from_cookie(request)
+    username = get_username_from_header(request)
     user = db.query(User).filter(User.username==username).first()
     if not username or not user:
         return RedirectResponse(url="/login",status_code=303)
@@ -98,7 +106,7 @@ def add_task(request:Request, title:str=Form(...), db:Session=Depends(get_db)):
     return RedirectResponse(url="/",status_code=303)
 @app.post("/tasks/{task_id}/toggle")    
 def toggle(task_id:int, request:Request,db:Session=Depends(get_db)):
-    username = get_username_from_cookie(request)
+    username = get_username_from_header(request)
     user = db.query(User).filter(User.username==username).first()
     if not username or not user:
         return RedirectResponse(url="/login",status_code=303)
@@ -111,9 +119,9 @@ def toggle(task_id:int, request:Request,db:Session=Depends(get_db)):
 
 @app.post("/tasks/{task_id}/delete")
 def delete(task_id:int, request:Request,db:Session=Depends(get_db)):
-    # print(request.cookies)
-    username = get_username_from_cookie(request)
-    # print("Username from cookie:", username)
+    # #print(request.cookies)
+    username = get_username_from_header(request)
+    # #print("Username from cookie:", username)
     user = db.query(User).filter(User.username==username).first()
     if not username or not user:
         return RedirectResponse(url="/login",status_code=303)
@@ -126,7 +134,7 @@ def delete(task_id:int, request:Request,db:Session=Depends(get_db)):
 
 @app.post("/tasks/{task_id}/update")
 def update(task_id:int, request:Request, title:str=Form(...), db:Session=Depends(get_db)):
-    username = get_username_from_cookie(request)
+    username = get_username_from_header(request)
     user = db.query(User).filter(User.username==username).first()
     if not username or not user:
         return RedirectResponse(url="/login",status_code=303)
@@ -139,7 +147,7 @@ def update(task_id:int, request:Request, title:str=Form(...), db:Session=Depends
 
 @app.get("/add", response_class=HTMLResponse)
 def add_task_page(request:Request, db:Session=Depends(get_db)):
-    username = get_username_from_cookie(request)
+    username = get_username_from_header(request)
     user = db.query(User).filter(User.username==username).first()
     if not username or not user:
         return RedirectResponse(url="/login",status_code=303)
