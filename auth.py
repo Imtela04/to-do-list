@@ -6,7 +6,6 @@ from schemas import UserPublic
 from models import User
 from typing import Optional
 from config import SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES
-# from main import pwd_context,oauth2_scheme
 from fastapi.security import OAuth2PasswordBearer
 from passlib.context import CryptContext
 from fastapi.security import OAuth2PasswordBearer
