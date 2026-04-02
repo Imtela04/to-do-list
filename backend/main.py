@@ -20,7 +20,7 @@ async def lifespan(app: FastAPI):
     yield
 
 app = FastAPI(title="FastAPI To-Do App", lifespan=lifespan)  # ✅ one app
-app.mount("/static", StaticFiles(directory="static"), name="static")
+app.mount("/frontend/static", StaticFiles(directory="frontend/static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
 #shifted to auth.py to avoid circular imports
