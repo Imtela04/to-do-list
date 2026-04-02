@@ -43,7 +43,7 @@ def create_access_token(data: dict, expires_minutes: int = ACCESS_TOKEN_EXPIRE_M
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
-dummy=hash_password.hash('dummypassword')
+dummy=hash_password('dummypassword')
 def authenticate_user(db: Session, username: str, password: str):
     user = get_user(db, username)
     if not user:
@@ -76,15 +76,15 @@ async def get_current_user(
     return UserPublic(username=user.username)  # ✅ attribute access
 
 
-def get_username_from_cookie(request: Request) -> Optional[str]:
-    token = request.cookies.get("access_token")
-    if not token:
-        return None
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        return payload.get("sub")
-    except JWTError:
-        return None
+# def get_username_from_cookie(request: Request) -> Optional[str]:
+#     token = request.cookies.get("access_token")
+#     if not token:
+#         return None
+#     try:
+#         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+#         return payload.get("sub")
+#     except JWTError:
+#         return None
 
 def get_username_from_header(request:Request)->Optional[str]:
     auth_header = request.headers.get("Authorisation")
