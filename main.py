@@ -11,7 +11,7 @@ from schemas import UserPublic, Token, UserCreate, TaskCreate, TaskResponse
 from jose import JWTError, jwt
 from datetime import datetime, timedelta,timezone
 from config import SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES
-from auth import hash_password, verify_password, create_access_token, authenticate_user, get_current_user, oauth2_scheme, pwd_context, create_user
+from auth import hash_password, verify_password, create_access_token, authenticate_user, get_current_user, oauth2_scheme, pwd_context, create_user, get_username_from_cookie
 
 
 #app initialisation
@@ -27,6 +27,8 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="FastAPI To-Do App", lifespan=lifespan)  # ✅ one app
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
+
+#shifted to auth.py to avoid circular imports
 # pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 # oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
@@ -34,13 +36,12 @@ templates = Jinja2Templates(directory="templates")
 #homepage route
 @app.get("/", response_class=HTMLResponse)
 def read_root(request: Request, db: Session = Depends(get_db)):
-    user_id = request.cookies.get("user_id") #use cookies for logged in users
-    if user_id: #if user id exists in cookies, query db for user and their tasks, render homepage with task
-        user = db.query(User).filter(User.id == int(user_id)).first()
-        if user:
-            todos = db.query(Todo).filter(Todo.owner_id == user.id).all()
-            return templates.TemplateResponse("index.html", {"request": request, "todos": todos, "user": user})
-    return RedirectResponse(url="/login") #if not logged in, redirect to login page
+    username = get_username_from_cookie(request)
+    user = db.query(User).filter(User.username==username).first()
+    if not username or not user:
+        return RedirectResponse(url="/login",status_code=303)  #if not logged in, redirect to login page
+    task = db.query(Todo).filter(Todo.owner_id==user.id).all()
+    return templates.TemplateResponse("index.html",{"request":request,"todos":task,"user":user})
 
 #registration routes
 @app.get("/register", response_class=HTMLResponse)
@@ -54,7 +55,10 @@ def register(
     db: Session = Depends(get_db)
 ):
     hashed = hash_password(password)
-    create_user(db, username, hashed)
+    try:
+        create_user(db, username, hashed)
+    except HTTPException as e:
+        return templates.TemplateResponse("register.html",{"request":request,"error":e.detail})
     return RedirectResponse(url="/login", status_code=303)    
 
 #login routes
@@ -63,12 +67,14 @@ def login_page(request:Request):
     return templates.TemplateResponse("login.html", {"request":request})
 
 @app.post("/login", response_model=Token)
-async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
-    user = authenticate_user(db, form_data.username, form_data.password)  # ✅ pass db
+def login(request:Request, username: str = Form(...), password:str = Form(...),db: Session=Depends(get_db)):
+    user = authenticate_user(db, username, password)  # ✅ pass db
     if not user:
-        raise HTTPException(status_code=401, detail="Invalid credentials")
+        return templates.TemplateResponse("login.html",{"request":request, "error":"Invalid credentials"})
     access_token = create_access_token({"sub": user.username})
-    return {"access_token": access_token, "token_type": "bearer"}
+    response = RedirectResponse(url="/", status_code=303)
+    response.set_cookie(key="access_token",value=access_token,httponly=True)
+    return response
 
 #current user route
 @app.get("/me", response_model=UserPublic, summary="Get my profile (protected)")
@@ -86,19 +92,21 @@ def logout():
 #task management routes
 @app.post("/tasks")
 def add_task(request:Request, title:str=Form(...), db:Session=Depends(get_db)):
-    user_id = request.cookies.get("user_id")
-    if not user_id:
+    username = get_username_from_cookie(request)
+    user = db.query(User).filter(User.username==username).first()
+    if not username or not user:
         return RedirectResponse(url="/login",status_code=303)
-    task = Todo(title=title,owner_id=int(user_id))
+    task = Todo(title=title,owner_id=user.id)
     db.add(task)
     db.commit()
     return RedirectResponse(url="/",status_code=303)
 @app.post("/tasks/{task_id}/toggle")    
 def toggle(task_id:int, request:Request,db:Session=Depends(get_db)):
-    user_id = request.cookies.get("user_id")
-    if not user_id:
+    username = get_username_from_cookie(request)
+    user = db.query(User).filter(User.username==username).first()
+    if not username or not user:
         return RedirectResponse(url="/login",status_code=303)
-    task = db.query(Todo).filter(Todo.id==task_id, Todo.owner_id==int(user_id)).first()
+    task = db.query(Todo).filter(Todo.id==task_id, Todo.owner_id==int(user.id)).first()
     if not task:
         raise HTTPException(status_code=404,detail="Task not found")
     task.completed = not task.completed
@@ -107,10 +115,13 @@ def toggle(task_id:int, request:Request,db:Session=Depends(get_db)):
 
 @app.post("/tasks/{task_id}/delete")
 def delete(task_id:int, request:Request,db:Session=Depends(get_db)):
-    user_id=request.cookies.get("user_id")
-    if not user_id:
+    # print(request.cookies)
+    username = get_username_from_cookie(request)
+    # print("Username from cookie:", username)
+    user = db.query(User).filter(User.username==username).first()
+    if not username or not user:
         return RedirectResponse(url="/login",status_code=303)
-    task = db.query(Todo).filter(Todo.id==task_id,Todo.owner_id==int(user_id)).first()
+    task = db.query(Todo).filter(Todo.id==task_id,Todo.owner_id==user.id).first()
     if not task:
         raise HTTPException(status_code=404,detail="Task not found")
     db.delete(task)
@@ -119,10 +130,11 @@ def delete(task_id:int, request:Request,db:Session=Depends(get_db)):
 
 @app.post("/tasks/{task_id}/update")
 def update(task_id:int, request:Request, title:str=Form(...), db:Session=Depends(get_db)):
-    user_id = request.cookies.get("user_id")
-    if not user_id:
+    username = get_username_from_cookie(request)
+    user = db.query(User).filter(User.username==username).first()
+    if not username or not user:
         return RedirectResponse(url="/login",status_code=303)
-    task = db.query(Todo).filter(Todo.id==task_id,Todo.owner_id==int(user_id)).first()
+    task = db.query(Todo).filter(Todo.id==task_id,Todo.owner_id==user.id).first()
     if not task:
         raise HTTPException(status_code=404,detail="Task not found")
     task.title = title
@@ -131,12 +143,10 @@ def update(task_id:int, request:Request, title:str=Form(...), db:Session=Depends
 
 @app.get("/add", response_class=HTMLResponse)
 def add_task_page(request:Request, db:Session=Depends(get_db)):
-    user_id = request.cookies.get("user_id")
-    if not user_id:
+    username = get_username_from_cookie(request)
+    user = db.query(User).filter(User.username==username).first()
+    if not username or not user:
         return RedirectResponse(url="/login",status_code=303)
-    user = db.query(User).filter(User.id==int(user_id)).first()
-    if not user:
-        return  RedirectResponse(url="/login",status_code=303)
     return templates.TemplateResponse("add_task_page.html",{"request":request, "user":user})
 
 #handles all server side logic, db interactions, user authentication, CRUD operations for tasks, and rendering of HTML templates for the frontend

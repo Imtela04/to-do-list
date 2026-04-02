@@ -18,10 +18,17 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 def get_user(db: Session, username: str):
     return db.query(User).filter(User.username == username).first()
 
-def create_user(db: Session, username: str, hashed_password: str, full_name: str = ""):
-    user = User(username=username, hashed_password=hashed_password, full_name=full_name)
+def create_user(db: Session, username: str, hashed_password: str):
+    existing = db.query(User).filter(User.username==username).first()
+    if existing:
+        raise HTTPException(status_code=409, detail="Username unavailable")
+    user = User(username=username, hashed_password=hashed_password)
     db.add(user)
-    db.commit()
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=409,detail="Username unavailable")
     db.refresh(user)
     return user
 
@@ -65,4 +72,15 @@ async def get_current_user(
     user = get_user(db, username)          # ✅ pass db
     if not user:
         raise cred_exc
-    return UserPublic(username=user.username, full_name=user.full_name)  # ✅ attribute access
+    return UserPublic(username=user.username)  # ✅ attribute access
+
+
+def get_username_from_cookie(request: Request) -> Optional[str]:
+    token = request.cookies.get("access_token")
+    if not token:
+        return None
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        return payload.get("sub")
+    except JWTError:
+        return None

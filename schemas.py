@@ -21,7 +21,6 @@ class TaskResponse(BaseModel):
 
 class UserPublic(BaseModel):
     username: str
-    full_name: Optional[str] = None
     class Config:
         from_attributes = True
 
