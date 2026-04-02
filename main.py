@@ -7,7 +7,7 @@ from database import engine, Base, get_db
 from models import User, Todo
 from schemas import UserPublic, Token
 from auth import hash_password, create_access_token, authenticate_user, get_current_user, create_user, get_username_from_cookie
-
+ 
 
 #app initialisation
 #create db tables
@@ -26,6 +26,7 @@ templates = Jinja2Templates(directory="templates")
 #shifted to auth.py to avoid circular imports
 # pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 # oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
+
 
     
 #homepage route
@@ -68,7 +69,7 @@ def login(request:Request, username: str = Form(...), password:str = Form(...),d
         return templates.TemplateResponse("login.html",{"request":request, "error":"Invalid credentials"})
     access_token = create_access_token({"sub": user.username})
     response = RedirectResponse(url="/", status_code=303)
-    response.set_cookie(key="access_token",value=access_token,httponly=True)
+    response.set_cookie(key="access_token",value=access_token, httponly=False)
     return response
 
 #current user route

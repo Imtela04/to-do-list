@@ -19,5 +19,29 @@
         </form>
         <p>Don't have an account? <a href="/register">Register here</a></p>
     </div>
+<script>
+    function getCookie(name){
+        return document.cookie.split("; ").find(row=>startsWith(name+"="))?.split("=")[1];
+    }
+    document.addEventListener("DOMContentLoaded",()=>{
+        const token = getCookie("access_token");
+
+        document.querySelectorAll("form").forEach(form=>{
+            from.addEventListener("submit", async(e)=>{
+                e.preventDefault();
+                const formData = new FormData(form);
+                const response = await fetch(from.action,{
+                    method:form.method,
+                    headers:{
+                        "Authorisation":`Bearer $ {token}`   //jwt sent in header
+                    }, body: new URLSearchParams(formData)
+                });
+                if(response.redirected){
+                    window.location.href = response.url;
+                }
+            });
+        });
+    });
+</script>
 </body>
 </html>
