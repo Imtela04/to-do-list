@@ -1,5 +1,4 @@
-#defines structures of the database tables using SQLAlchemy ORM
-from sqlalchemy import Column, ForeignKey, Integer, String
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String
 from sqlalchemy.orm import relationship
 from backend.database import Base
 
@@ -15,8 +14,9 @@ class Todo(Base):
     __tablename__ = "todos"
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String, index=True)
-    completed = Column(String, index=True)
+    completed = Column(Boolean, default=False)   # ✅ was String
     description = Column(String, nullable=True)
+    deadline = Column(DateTime, nullable=True)   # ✅ new
+    category = Column(String, nullable=True)     # ✅ new
     owner_id = Column(Integer, ForeignKey("users.id"))
     owner = relationship("User", back_populates="todos")
-    

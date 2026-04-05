@@ -20,7 +20,15 @@ async def lifespan(app: FastAPI):
     yield
 
 app = FastAPI(title="FastAPI To-Do App", lifespan=lifespan)  # ✅ one app
+from fastapi.middleware.cors import CORSMiddleware
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # or ["http://localhost:8000"] to be more strict
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 #homepage route
 #current user route
 @app.get("/api/me", response_model=UserPublic)
@@ -77,9 +85,11 @@ def get_tasks(current_user: UserPublic = Depends(get_current_user), db:Session=D
 def add_task(current_user:UserPublic=Depends(get_current_user), title:str=Form(...), db:Session=Depends(get_db)):
     user = db.query(User).filter(User.username==current_user.username).first()
     task = Todo(title=title,owner_id=user.id)
-    db.add(task)
-    db.commit()
-    db.refresh(task)
+    exist = db.query(Todo).filter(Todo.title==title,Todo.owner_id==user.id).first()
+    if not exist:
+        db.add(task)
+        db.commit()
+        db.refresh(task)
     return task
 
 @app.delete("/api/tasks/{task_id}")
@@ -107,6 +117,54 @@ def update_task_title(
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     task.title = title
+    db.commit()
+    db.refresh(task)
+    return task
+@app.patch("/api/tasks/{task_id}/description")
+def update_task_description(
+    task_id: int,
+    description: str = Form(...),
+    current_user: UserPublic = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    user = db.query(User).filter(User.username == current_user.username).first()
+    task = db.query(Todo).filter(Todo.id == task_id, Todo.owner_id == user.id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    task.description = description
+    db.commit()
+    db.refresh(task)
+    return task
+
+@app.patch("/api/tasks/{task_id}/deadline")
+def update_task_deadline(
+    task_id: int,
+    deadline: str = Form(...),
+    current_user: UserPublic = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    from datetime import datetime
+    user = db.query(User).filter(User.username == current_user.username).first()
+    task = db.query(Todo).filter(Todo.id == task_id, Todo.owner_id == user.id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    task.deadline = datetime.fromisoformat(deadline)
+    db.commit()
+    db.refresh(task)
+    return task
+
+@app.patch("/api/tasks/{task_id}/category")
+def update_task_category(
+    task_id: int,
+    category: str = Form(...),
+    current_user: UserPublic = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    user = db.query(User).filter(User.username == current_user.username).first()
+    task = db.query(Todo).filter(Todo.id == task_id, Todo.owner_id == user.id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    task.category = category
     db.commit()
     db.refresh(task)
     return task

@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Add Task</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <form class="add-task-form" id="add-task-form">
+        <h2>Add New Task</h2>
+        <input type="text" name="title" placeholder="Tasks title" required>
+        <textarea name="description" placeholder="Task description (optional)" rows="4"></textarea>
+        <input type="datetime-local" name="deadline" placeholder="Task Deadline (optional)">
+        <select name="category">
+            <option value="">Select a category</option>
+            <option value="work">Work</option>
+            <option value="personal">Personal</option>
+        </select>
+        <input id="add-task-submit" type="submit" value="Add Task">
+    </form>
+    <script>
+        document.getElementById("add-task-form").addEventListener("submit",async (e)=>{e.preventDefault();
+        const form = e.target;
+        const token = localStorage.getItem("access_token");
+        const body ={
+            title:form.title.value,
+            description:form.description.value,
+            deadline:form.deadline.value || null,
+            category:form.category.value || null
+        };
+        const res = await fetch("/api/tasks",{
+            method:"POST",
+            headers:{
+                "Content-Type":"application/x-www-form-urlencoded",
+                "Authorization": `Bearer ${token}`
+            },
+            body: new URLSearchParams({
+                title: form.title.value,
+                description:form.description.value,
+                deadline:form.deadline.value || "",
+                category:form.category.value || ""
+            })
+        });
+        
+        
+        if(res.ok){
+            window.location.href="/index.html"
+        }else{
+            alert("Failed to add task: " + res.statusText);
+        }            
+    });
+    
+    </script>
+</body>
+</html>

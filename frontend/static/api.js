@@ -4,12 +4,12 @@ function getToken() {
   return localStorage.getItem("access_token");
 }
 
-function authHeaders() {
-  return {
-    "Authorization": `Bearer ${getToken()}`,
-    "Content-Type": "application/x-www-form-urlencoded"
-  };
+function authHeaders(hasBody = true) {
+    const headers = { "Authorization": `Bearer ${getToken()}` };
+    if (hasBody) headers["Content-Type"] = "application/x-www-form-urlencoded";
+    return headers;
 }
+
 
 export async function login(username, password) {
   const res = await fetch(`${BASE}/api/login`, {
@@ -22,6 +22,8 @@ export async function login(username, password) {
   localStorage.setItem("access_token", data.access_token);
 }
 
+
+
 export async function register(username, password) {
   const res = await fetch(`${BASE}/api/register`, {
     method: "POST",
@@ -32,6 +34,7 @@ export async function register(username, password) {
   const data = await res.json();
   localStorage.setItem("access_token", data.access_token);
 }
+
 
 export function logout() {
   localStorage.removeItem("access_token");
@@ -63,10 +66,39 @@ export async function updateTaskTitle(id, title) {
     return res.json();
 }
 
+export async function updateTaskDescription(id, description) {
+    const res = await fetch(`${BASE}/api/tasks/${id}/description`, {
+        method: "PATCH",
+        headers: authHeaders(),
+        body: new URLSearchParams({ description })
+    });
+    if (!res.ok) throw new Error("Failed to update description");
+    return res.json();
+}
+
+export async function updateTaskDeadline(id, deadline) {
+    const res = await fetch(`${BASE}/api/tasks/${id}/deadline`, {
+        method: "PATCH",
+        headers: authHeaders(),
+        body: new URLSearchParams({ deadline })
+    });
+    if (!res.ok) throw new Error("Failed to update deadline");
+    return res.json();
+}
+
+export async function updateTaskCategory(id, category) {
+    const res = await fetch(`${BASE}/api/tasks/${id}/category`, {
+        method: "PATCH",
+        headers: authHeaders(),
+        body: new URLSearchParams({ category })
+    });
+    if (!res.ok) throw new Error("Failed to update category");
+    return res.json();
+}
 export async function toggleTask(id) {
     const res = await fetch(`${BASE}/api/tasks/${id}/toggle`, {
         method: "PATCH",
-        headers: authHeaders()
+        headers: authHeaders(false) 
     });
     if (!res.ok) throw new Error("Failed to toggle task");
     return res.json();
