@@ -4,13 +4,15 @@
   <meta charset="UTF-8">
   <title>To-Do</title>
   <link rel="stylesheet" href="/static/styles.css">
+  <script type="module" src="/static/darkmode.js"></script>
 </head>
 <body>
   <header class="hero">
-    <div id = "digital-clock">Loading...</div>
     <h1 id="greeting">👋 Hello</h1>
     <p id="subtext">Make today count!</p>
+    <div id = "digital-clock">Loading...</div>
     <div id="calendar"></div>
+    
   </header>
   
 
@@ -21,7 +23,7 @@
       <button id="dark-toggle">🌙</button>
     </div>
     
-    <button style="background-color:rgb(238, 124, 124)" onclick="logout()">Logout</button>  
+    <button style="background-color:rgb(238, 124, 124); border-radius:50px; padding:5px 10px; border: none;cursor:pointer" onclick="logout()">Logout</button>  
   </div>
 
   <div class="tasks-container" id="tasks-container"></div>
@@ -62,55 +64,35 @@
       document.getElementById("subtext").innerText = parts.sub;
     }
    // Dark mode toggle
-    function toggleDark() {
-        document.body.classList.toggle("dark");
-        const isDark = document.body.classList.contains("dark");
-        localStorage.setItem("darkMode", isDark);
-        document.getElementById("dark-toggle").textContent = isDark ? "☀️" : "🌙";
-        
-        refresh(); // ✅ re-render tasks with new colors
-    }
+    import { initDarkMode } from "/static/darkmode.js";
 
-    document.getElementById("dark-toggle").addEventListener("click", toggleDark);
-
-    // Remember preference on page load
-    if (localStorage.getItem("darkMode") === "true") {
-        document.body.classList.add("dark");
-        document.getElementById("dark-toggle").textContent = "☀️";
-    }
+    // remove your old toggleDark function and dark-toggle event listener
+    initDarkMode("dark-toggle");
     // Render
     function renderTasks(tasks) {
         const container = document.getElementById("tasks-container");
         const isDark = document.body.classList.contains("dark");
         container.innerHTML = tasks.map((task, i) => `
-            <div class="task-card ${!isDark ? (i% 2 === 0 ? 'yellow' : 'purple'):(i% 2 === 0 ? 'blue' : 'purple')}">
+            <div class="task-card ${!isDark ? (i % 2 === 0 ? 'yellow' : 'purple') : (i % 2 === 0 ? 'blue' : 'purple')}" onclick="handleCardClick(this)">
                 <div class="task-title ${task.completed ? 'done' : ''}">${task.title}</div>
                 <div class="task-actions">
-                    <button onclick="handleToggle(${task.id})">
+                    <button onclick="event.stopPropagation(); handleToggle(${task.id})">
                         ${task.completed ? '↩️' : '✅'}
                     </button>
-                    <button onclick="handleEdit(${task.id}, '${task.title.replace(/'/g, "\\'")}', '${(task.description||'').replace(/'/g, "\\'")}', '${task.deadline||''}', '${task.category||''}')">✏️</button>                      <button onclick="handleDelete(${task.id})">🗑️</button>
+                    <button onclick="event.stopPropagation(); handleEdit(${task.id}, '${task.title.replace(/'/g, "\\'")}', '${(task.description||'').replace(/'/g, "\\'")}', '${task.deadline||''}', '${task.category||''}')">✏️</button>
+                    <button onclick="event.stopPropagation(); handleDelete(${task.id})">🗑️</button>
+                </div>
+                <div class="task-preview">
+                    <p>📝 ${task.description || 'No description'}</p>
+                    <p>⏰ ${task.deadline ? new Date(task.deadline).toLocaleString() : 'No deadline'}</p>
+                    <p>🏷️ ${task.category || 'No category'}</p>
                 </div>
             </div>
         `).join("");
-      
     }
-    function hover(){
-      const card = document.querySelector('.task-container');
-      const hidePreview = () => (card.style.display = 'none');
-      const showPreview = (e) => {
-        card.querySelector('.task-description').innerText = e.description ? `Description: ${e.description}` : 'No description';
-        card.querySelector('.task-deadline').innerText = e.deadline ? `Deadline: ${new Date(e.deadline).toLocaleString()}` : 'No deadline';
-        card.querySelector('.task-category').innerText = e.category ? `Category: ${e.category}` : 'No category';
-      }
-      document.querySelectorAll('.task-card').forEach(card => {
-        card.addEventListener('mouseover', () => showPreview(card.dataset));
-        card.addEventListener('mouseout', hidePreview);
-    });
-
-
+    window.handleCardClick = (card) => {
+        card.classList.toggle("clicked");
     }
-    
     function user() {
         const token = localStorage.getItem("access_token");
         if (!token) return null;
@@ -120,6 +102,39 @@
         } catch {
             return null;
         }
+    }
+    function renderCalendar() {
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = now.getMonth();
+        const today = now.getDate();
+
+        const monthNames = ["January","February","March","April","May","June",
+                            "July","August","September","October","November","December"];
+
+        const firstDay = new Date(year, month, 1).getDay();
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+        let html = `
+            <div class="calendar">
+                <div class="calendar-header">${monthNames[month]} ${year}</div>
+                <div class="calendar-grid">
+                    <span>Su</span><span>Mo</span><span>Tu</span>
+                    <span>We</span><span>Th</span><span>Fr</span><span>Sa</span>
+        `;
+
+        // Empty cells before first day
+        for (let i = 0; i < firstDay; i++) {
+            html += `<span></span>`;
+        }
+
+        // Day cells
+        for (let d = 1; d <= daysInMonth; d++) {
+            html += `<span class="${d === today ? 'today' : ''}">${d}</span>`;
+        }
+
+        html += `</div></div>`;
+        document.getElementById("calendar").innerHTML = html;
     }
     const u = user();
     if (u) document.getElementById("user-info").textContent = `Logged in as ${u.username}`;
@@ -166,15 +181,18 @@
 
     refresh();
 };
+
     window.handleDelete = async (id) => {
       await deleteTask(id);
       refresh();
     };
 
+
     window.showAddForm  = () => window.location.href="/add.html";
     window.hideAddForm  = () => document.getElementById("add-form").style.display = "none";
 
     // Init
+    renderCalendar();   
     updateGreeting();
     setInterval(updateGreeting, 60_000);
     refresh();

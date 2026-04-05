@@ -6,6 +6,13 @@
     <title>Add Task</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/styles.css">
+    <script>
+    // Apply dark mode immediately before page renders to avoid flash
+    if (localStorage.getItem("darkMode") === "true") {
+        document.documentElement.classList.add("dark");
+    }
+    </script>
+    <script type="module" src="/static/darkmode.js"></script>
 </head>
 <body>
     <form class="add-task-form" id="add-task-form">
@@ -21,6 +28,8 @@
         <input id="add-task-submit" type="submit" value="Add Task">
     </form>
     <script>
+        import { initDarkMode } from "/static/darkmode.js";
+        initDarkMode("dark-toggle");
         document.getElementById("add-task-form").addEventListener("submit",async (e)=>{e.preventDefault();
         const form = e.target;
         const token = localStorage.getItem("access_token");
